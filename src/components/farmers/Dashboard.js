@@ -1,29 +1,65 @@
 import { useEffect, useState } from "react";
 import { useWeb3 } from "../../contexts/Web3Context";
+import { ethers } from 'ethers';
 import CreateBatch from '../batches/CreateBatch';
 import OrderList from '../orders/OrderList';
 import { useOrders } from '../../hooks/useOrders';
 import { fetchBatches } from '../../utils/contractCalls';
 import { motion } from 'framer-motion';
-import BatchList from '../batches/BatchList';
+import Header from '../Header.jsx';
 
 export default function FarmerDashboard() {
-  const { contract, account } = useWeb3();
+  const { contract, account, userRole } = useWeb3();
   const [farmerData, setFarmerData] = useState(null);
+  const [batches, setBatches] = useState([]);
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const orders = useOrders(account);
+  const [loadedOrders, setLoadedOrders] = useState([]);
 
   useEffect(() => {
     const loadFarmerData = async () => {
       setIsLoading(true);
       if (contract && account) {
         try {
+          // Load farmer profile data
           const data = await contract.farmers(account);
+          
+          // Fetch batches using both methods for compatibility
           const allBatches = await fetchBatches(contract);
           const farmerBatches = allBatches.filter(b => b.farmerAddress === account);
-          setFarmerData({ ...data, batches: farmerBatches });
+          
+          // Format batches with additional information
+          const formattedBatches = farmerBatches.map(batch => ({
+            ...batch,
+            batchId: Number(batch.batchId),
+            quantity: Number(batch.quantity),
+            pricePerLiter: ethers.formatUnits(batch.pricePerLiter || batch.pricePerLiterWei, 'ether'),
+            expiryDate: new Date(Number(batch.expiryDate) * 1000),
+            isAvailable: (batch.flags & 0x1) !== 0 && (batch.flags & 0x2) === 0
+          }));
+          
+          setBatches(formattedBatches);
+          setFarmerData({ ...data, batches: formattedBatches });
+
+          // Fetch orders if not using the hook
+          if (!orders.length) {
+            const orderIds = await contract.getFarmerOrders(account);
+            const orderData = await Promise.all(
+              orderIds.map(async (id) => {
+                const order = await contract.orders(id);
+                return {
+                  orderId: Number(order.orderId),
+                  buyer: order.buyer,
+                  quantity: Number(order.quantity),
+                  totalPrice: ethers.formatUnits(order.totalPrice, 'ether'),
+                  isDelivered: order.isDelivered,
+                };
+              })
+            );
+            setLoadedOrders(orderData);
+          }
         } catch (error) {
           console.error("Error loading farmer data:", error);
         } finally {
@@ -31,8 +67,39 @@ export default function FarmerDashboard() {
         }
       }
     };
+    
     loadFarmerData();
-  }, [contract, account]);
+  }, [contract, account, orders.length]);
+
+  const toggleAvailability = async (batchId) => {
+    try {
+      const tx = await contract.toggleBatchAvailability(batchId);
+      await tx.wait();
+      setBatches(batches.map(b => 
+        b.batchId === batchId ? { ...b, isAvailable: !b.isAvailable } : b
+      ));
+      
+      // Update in farmerData as well
+      setFarmerData(prev => ({
+        ...prev,
+        batches: prev.batches.map(b => 
+          b.batchId === batchId ? { ...b, isAvailable: !b.isAvailable } : b
+        )
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (userRole !== 'farmer') {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-center py-8 text-red-500 font-medium">
+          Access Denied. This page is for farmers only.
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -67,8 +134,12 @@ export default function FarmerDashboard() {
     );
   }
 
+  // Use orders from hook or fallback to loaded orders
+  const displayOrders = orders.length > 0 ? orders : loadedOrders;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      <Header />
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-green-700 to-green-900 rounded-2xl p-6 mb-8 text-white">
         <h1 className="text-2xl font-bold mb-2">Welcome back, {farmerData.name || 'Farmer'}</h1>
@@ -103,14 +174,14 @@ export default function FarmerDashboard() {
             {/* Stats Cards */}
             <StatsCard
               title="Total Batches"
-              value={farmerData.batches.length}
+              value={batches.length}
               description="Registered milk batches"
               icon="batch"
               color="green"
             />
             <StatsCard
               title="Active Orders"
-              value={orders.length}
+              value={displayOrders.length}
               description="Orders in progress"
               icon="order"
               color="blue"
@@ -138,7 +209,11 @@ export default function FarmerDashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >
-            <OrderList orders={orders} />
+            {displayOrders.length === 0 ? (
+              <p className="text-center py-8 text-gray-500">No orders yet.</p>
+            ) : (
+              <OrderList orders={displayOrders} />
+            )}
           </motion.div>
         )}
 
@@ -163,7 +238,27 @@ export default function FarmerDashboard() {
             {showBatchForm && (
               <CreateBatch onClose={() => setShowBatchForm(false)} />
             )}
-            <BatchList batches={farmerData.batches} />
+            {batches.length === 0 ? (
+              <p className="text-center py-8 text-gray-500">No batches registered.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {batches.map(batch => (
+                  <div key={batch.batchId} className="bg-white p-4 rounded-lg shadow">
+                    <p>Batch ID: {batch.batchId}</p>
+                    <p>Quantity: {batch.quantity} L</p>
+                    <p>Price: {batch.pricePerLiter} ETH/L</p>
+                    <p>Expiry: {batch.expiryDate.toLocaleDateString()}</p>
+                    <p>Status: {batch.isAvailable ? 'Available' : 'Unavailable'}</p>
+                    <button
+                      onClick={() => toggleAvailability(batch.batchId)}
+                      className="mt-2 bg-yellow-400 text-black py-1 px-4 rounded hover:bg-yellow-500"
+                    >
+                      Toggle Availability
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </div>

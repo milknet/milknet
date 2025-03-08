@@ -6,13 +6,17 @@ import OrderModal from './OrderModal';
 import FormatBatchData, { formatDisplayPrice } from '../batches/FormatBatchData';
 
 export default function Marketplace() {
-  const { contract } = useWeb3();
+  const { contract, isPaused } = useWeb3();
   const [batches, setBatches] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [txStatus, setTxStatus] = useState({ loading: false, error: null });
+
+  if (isPaused) {
+    return <div className="text-center py-8 text-red-500">The marketplace is currently paused. Please try again later.</div>;
+  }
 
   useEffect(() => {
     const loadBatches = async () => {
@@ -45,7 +49,7 @@ export default function Marketplace() {
       setTxStatus({ loading: true, error: null });
       
       const quantityBN = ethers.toBigInt(quantity);
-      const totalPriceWei = quantityBN.mul(selectedBatch.pricePerLiterWei);
+      const totalPriceWei = quantityBN * selectedBatch.pricePerLiterWei;
       const tx = await contract.placeOrder(
         selectedBatch.batchId,
         quantityBN,
@@ -60,7 +64,13 @@ export default function Marketplace() {
       setBatches(FormatBatchData(rawBatches));
       
     } catch (error) {
-      setTxStatus({ loading: false, error: error.message });
+      let errorMsg = 'Transaction failed. Please try again.';
+    if (error.message.includes('Insufficient quantity')) {
+      errorMsg = 'Not enough quantity available in this batch.';
+    } else if (error.message.includes('Insufficient payment')) {
+      errorMsg = 'Insufficient funds. Please check your wallet balance.';
+    }
+      setTxStatus({ loading: false, error: errorMsg });
     }
   };
 

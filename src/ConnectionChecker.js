@@ -1,21 +1,25 @@
-import { useWeb3 } from '../contexts/Web3Context';
+import React, { useEffect, useState } from 'react';
+import { useWeb3 } from './contexts/Web3Context';
 
-export default function ConnectionChecker() {
-  const { account, contract } = useWeb3();
+function ConnectionChecker() {
+  const [isMetaMaskInstalled, setIsMetaMaskInstalled] = useState(false);
+  const { account } = useWeb3();
+  const walletConnected = !!account;
 
-  const verifyConnection = async () => {
-    try {
-      const farmerCount = await contract.farmerCounter();
-      console.log('Connection successful! Farmers count:', farmerCount.toString());
-    } catch (error) {
-      console.error('Connection failed:', error);
-    }
-  };
+  useEffect(() => {
+    // Check if MetaMask is installed
+    setIsMetaMaskInstalled(typeof window.ethereum !== 'undefined');
+  }, []);
 
   return (
-    <div>
-      <p>Connected account: {account}</p>
-      <button onClick={verifyConnection}>Verify Connection</button>
+    <div className="connection-status">
+      {!isMetaMaskInstalled ? (
+        <p>MetaMask is not installed. Please install MetaMask to use this app.</p>
+      ) : (
+        <p>MetaMask Status: {walletConnected ? 'Connected' : 'Not Connected'}</p>
+      )}
     </div>
   );
 }
+
+export default ConnectionChecker;

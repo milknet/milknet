@@ -34,9 +34,9 @@ export default function Landing() {
             >
               I'm a farmer
             </Link>
-            <Link 
-              to="/marketplace" 
-              className="bg-green-500 text-black px-6 py-3 rounded-md hover:bg-green-600 transition-transform hover:-translate-y-0.5 text-lg font-medium"
+            <Link
+                 to="/register-buyer"
+                className="bg-green-500 text-black px-6 py-3 rounded-md hover:bg-green-600 transition-transform hover:-translate-y-0.5 text-lg font-medium"
             >
               I'm a Buyer
             </Link>

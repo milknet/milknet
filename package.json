@@ -53,11 +53,11 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.3.5"
   },
- "overrides": {
-  "nth-check": "^2.0.1",
-  "serialize-javascript": "^6.0.2",
-  "cookie": "^0.7.0",
-  "svgo": "^3.0.2",
-  "postcss": "^8.5.3" 
-}
+  "overrides": {
+    "nth-check": "^2.0.1",
+    "serialize-javascript": "^6.0.2",
+    "cookie": "^0.7.0",
+    "svgo": "^3.0.2",
+    "postcss": "^8.5.3"
+  }
 }
